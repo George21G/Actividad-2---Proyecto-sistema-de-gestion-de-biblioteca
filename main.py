@@ -8,15 +8,16 @@ from libro import Libro
 from usuario import Usuario
 from categoria_libro import CategoriaLibro
 from estructuras_datos import ColaPrestamos, PilaHistorial
+from arboles import ArbolAVL
 
 # =============================================================================
 # VARIABLES GLOBALES DEL SISTEMA
 # =============================================================================
 
-# Listas principales que almacenan los datos del sistema
-lista_libros = []        # Almacena todos los libros del catálogo
-lista_usuarios = []      # Almacena todos los usuarios registrados
-lista_categorias = []    # Almacena todas las categorías de libros
+# Árboles principales que almacenan los datos del sistema
+arbol_libros = ArbolAVL(lambda libro: libro.isbn)           # Libros del catálogo
+arbol_usuarios = ArbolAVL(lambda usuario: usuario.id_usuario)  # Usuarios registrados
+lista_categorias = []    # Categorías de libros (se mantienen en lista)
 
 # Estructuras de datos para manejar transacciones
 cola_prestamos = ColaPrestamos()    # Cola FIFO para solicitudes de préstamos
@@ -35,12 +36,17 @@ def agregar_categoria():
     id_categoria = input("ID de la categoría: ")
     nombre = input("Nombre de la categoría: ")
     
+    # Validar que no exista ya la categoría
+    if any(cat.id_categoria == id_categoria for cat in lista_categorias):
+        print("❌ Ya existe una categoría con ese ID.")
+        return
+
     # Crear objeto CategoriaLibro con los datos ingresados
     categoria = CategoriaLibro(id_categoria, nombre)
-    
+
     # Agregar la categoría a la lista global de categorías
     lista_categorias.append(categoria)
-    
+
     # Confirmar al usuario que la categoría fue agregada
     print("✅ Categoría agregada.")
 
@@ -76,12 +82,16 @@ def agregar_libro():
         if 0 <= opcion < len(lista_categorias):
             categoria = lista_categorias[opcion]  # Obtener la categoría seleccionada
             
+            if arbol_libros.buscar(isbn):
+                print("❌ Ya existe un libro con ese ISBN.")
+                return
+
             # Crear objeto Libro con todos los datos
             libro = Libro(isbn, titulo, autor, categoria)
-            
-            # Agregar el libro a la lista global de libros
-            lista_libros.append(libro)
-            
+
+            # Agregar el libro al árbol global de libros
+            arbol_libros.insertar(libro)
+
             # Confirmar al usuario que el libro fue agregado
             print("✅ Libro agregado.")
         else:
@@ -105,12 +115,16 @@ def registrar_usuario():
     apellido = input("Apellido del usuario: ")
     correo = input("Correo del usuario: ")
     
+    if arbol_usuarios.buscar(id_usuario):
+        print("❌ Ya existe un usuario con ese ID.")
+        return
+
     # Crear objeto Usuario con todos los datos ingresados
     usuario = Usuario(id_usuario, nombre, apellido, correo)
-    
-    # Agregar el usuario a la lista global de usuarios
-    lista_usuarios.append(usuario)
-    
+
+    # Agregar el usuario al árbol global de usuarios
+    arbol_usuarios.insertar(usuario)
+
     # Confirmar al usuario que el registro fue exitoso
     print("✅ Usuario registrado.")
 
@@ -127,11 +141,11 @@ def prestar_libro():
     id_usuario = input("ID del usuario: ")
     isbn = input("ISBN del libro: ")
 
-    # Buscar el libro por ISBN en la lista de libros
-    libro = next((l for l in lista_libros if l.isbn == isbn), None)
-    
-    # Buscar el usuario por ID en la lista de usuarios
-    usuario = next((u for u in lista_usuarios if u.id_usuario == id_usuario), None)
+    # Buscar el libro por ISBN en el árbol de libros
+    libro = arbol_libros.buscar(isbn)
+
+    # Buscar el usuario por ID en el árbol de usuarios
+    usuario = arbol_usuarios.buscar(id_usuario)
 
     # Verificar que tanto el libro como el usuario existan
     if libro and usuario:
@@ -165,8 +179,8 @@ def devolver_libro():
     id_usuario = input("ID del usuario: ")
     isbn = input("ISBN del libro: ")
 
-    # Buscar el usuario por ID en la lista de usuarios
-    usuario = next((u for u in lista_usuarios if u.id_usuario == id_usuario), None)
+    # Buscar el usuario por ID en el árbol de usuarios
+    usuario = arbol_usuarios.buscar(id_usuario)
 
     # Verificar que el usuario exista
     if usuario:
@@ -201,7 +215,7 @@ def mostrar_catalogo():
     Muestra información completa de cada libro incluyendo su estado
     """
     # Verificar si hay libros en el catálogo
-    if not lista_libros:
+    if arbol_libros.esta_vacio():
         print("📚 No hay libros en el catálogo.")
         return
     
@@ -209,7 +223,7 @@ def mostrar_catalogo():
     print("\n📚 CATÁLOGO DE LIBROS 📚")
     
     # Iterar sobre todos los libros y mostrar su información
-    for libro in lista_libros:
+    for libro in arbol_libros.recorrido_inorden():
         print(f"ISBN: {libro.isbn}")
         print(f"Título: {libro.titulo}")
         print(f"Autor: {libro.autor}")
@@ -223,7 +237,7 @@ def mostrar_usuarios():
     Muestra información personal y cantidad de libros prestados
     """
     # Verificar si hay usuarios registrados
-    if not lista_usuarios:
+    if arbol_usuarios.esta_vacio():
         print("👥 No hay usuarios registrados.")
         return
     
@@ -231,7 +245,7 @@ def mostrar_usuarios():
     print("\n👥 USUARIOS REGISTRADOS 👥")
     
     # Iterar sobre todos los usuarios y mostrar su información
-    for usuario in lista_usuarios:
+    for usuario in arbol_usuarios.recorrido_inorden():
         print(f"ID: {usuario.id_usuario}")
         print(f"Nombre: {usuario.nombre} {usuario.apellido}")
         print(f"Correo: {usuario.correo}")

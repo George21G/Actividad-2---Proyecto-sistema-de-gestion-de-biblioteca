@@ -9,6 +9,7 @@ from libro import Libro
 from usuario import Usuario
 from categoria_libro import CategoriaLibro
 from estructuras_datos import ColaPrestamos, PilaHistorial
+from arboles import ArbolAVL
 import sys
 
 def test_categoria_libro():
@@ -45,6 +46,37 @@ def test_libro():
     assert libro.categoria.nombre == "Ficción"
     assert libro.estado == "Disponible"
     print("✅ Libro: OK")
+
+def test_arbol_avl():
+    """Prueba la estructura de Árbol AVL con libros"""
+    print("🧪 Probando ArbolAVL...")
+
+    categoria = CategoriaLibro("FIC001", "Ficción")
+    arbol = ArbolAVL(lambda libro: libro.isbn)
+
+    libro1 = Libro("978-0000000001", "Libro A", "Autor A", categoria)
+    libro2 = Libro("978-0000000005", "Libro B", "Autor B", categoria)
+    libro3 = Libro("978-0000000003", "Libro C", "Autor C", categoria)
+
+    assert arbol.insertar(libro1) is True
+    assert arbol.insertar(libro2) is True
+    assert arbol.insertar(libro3) is True
+    assert len(arbol) == 3
+
+    # Búsqueda
+    encontrado = arbol.buscar(libro2.isbn)
+    assert encontrado is libro2
+
+    # Recorrido inorden debe regresar los ISBN ordenados
+    isbns = [libro.isbn for libro in arbol.recorrido_inorden()]
+    assert isbns == sorted(isbns)
+
+    # Eliminación
+    assert arbol.eliminar(libro1.isbn) is True
+    assert len(arbol) == 2
+    assert arbol.buscar(libro1.isbn) is None
+
+    print("✅ ArbolAVL: OK")
 
 def test_cola_prestamos():
     """Prueba la cola de préstamos"""
@@ -123,29 +155,38 @@ def test_sistema_completo():
     # Crear estructuras de datos
     cola = ColaPrestamos()
     historial = PilaHistorial()
-    
+    arbol_libros = ArbolAVL(lambda l: l.isbn)
+    arbol_usuarios = ArbolAVL(lambda u: u.id_usuario)
+
+    arbol_libros.insertar(libro1)
+    arbol_libros.insertar(libro2)
+    arbol_usuarios.insertar(usuario1)
+    arbol_usuarios.insertar(usuario2)
+
     # Simular préstamo de libro1 a usuario1
-    if libro1.estado == "Disponible":
-        libro1.estado = "No Disponible"
-        usuario1.libros_prestados.append(libro1)
-        cola.agregar_solicitud(usuario1.id_usuario, libro1.isbn)
-        historial.agregar_transaccion('prestamo', usuario1.id_usuario, libro1.isbn)
+    libro = arbol_libros.buscar(libro1.isbn)
+    usuario = arbol_usuarios.buscar(usuario1.id_usuario)
+    if libro and usuario and libro.estado == "Disponible":
+        libro.estado = "No Disponible"
+        usuario.libros_prestados.append(libro)
+        cola.agregar_solicitud(usuario.id_usuario, libro.isbn)
+        historial.agregar_transaccion('prestamo', usuario.id_usuario, libro.isbn)
     
     # Verificar préstamo
-    assert libro1.estado == "No Disponible"
-    assert len(usuario1.libros_prestados) == 1
+    assert libro.estado == "No Disponible"
+    assert len(usuario.libros_prestados) == 1
     assert cola.tamaño() == 1
     assert historial.tamaño() == 1
     
     # Simular devolución
-    if libro1 in usuario1.libros_prestados:
-        libro1.estado = "Disponible"
-        usuario1.libros_prestados.remove(libro1)
-        historial.agregar_transaccion('devolucion', usuario1.id_usuario, libro1.isbn)
+    if libro in usuario.libros_prestados:
+        libro.estado = "Disponible"
+        usuario.libros_prestados.remove(libro)
+        historial.agregar_transaccion('devolucion', usuario.id_usuario, libro.isbn)
     
     # Verificar devolución
-    assert libro1.estado == "Disponible"
-    assert len(usuario1.libros_prestados) == 0
+    assert libro.estado == "Disponible"
+    assert len(usuario.libros_prestados) == 0
     assert historial.tamaño() == 2
     
     print("✅ Sistema Completo: OK")
@@ -169,6 +210,47 @@ def test_validaciones():
     
     print("✅ Validaciones: OK")
 
+def analisis_eficiencia(num_elementos=2000, num_busquedas=400):
+    """
+    Realiza un análisis comparativo entre la búsqueda en lista vs Árbol AVL.
+    Retorna un diccionario con los tiempos medidos.
+    """
+    from random import sample, randint
+    from time import perf_counter
+
+    categoria = CategoriaLibro("TEC", "Tecnología")
+
+    lista_libros = []
+    arbol_libros = ArbolAVL(lambda libro: libro.isbn)
+
+    for indice in range(num_elementos):
+        isbn = f"978-{indice:010d}"
+        libro = Libro(isbn, f"Título {indice}", f"Autor {indice}", categoria)
+        lista_libros.append(libro)
+        arbol_libros.insertar(libro)
+
+    claves_existentes = sample([libro.isbn for libro in lista_libros], num_busquedas // 2)
+    claves_inexistentes = [f"978-{randint(num_elementos, num_elementos * 2):010d}" for _ in range(num_busquedas // 2)]
+    claves_busqueda = claves_existentes + claves_inexistentes
+
+    inicio_lista = perf_counter()
+    for clave in claves_busqueda:
+        next((libro for libro in lista_libros if libro.isbn == clave), None)
+    tiempo_lista = perf_counter() - inicio_lista
+
+    inicio_arbol = perf_counter()
+    for clave in claves_busqueda:
+        arbol_libros.buscar(clave)
+    tiempo_arbol = perf_counter() - inicio_arbol
+
+    return {
+        "elementos": num_elementos,
+        "busquedas": num_busquedas,
+        "tiempo_lista_seg": tiempo_lista,
+        "tiempo_arbol_seg": tiempo_arbol,
+        "factor_mejora": (tiempo_lista / tiempo_arbol) if tiempo_arbol > 0 else float("inf"),
+    }
+
 def ejecutar_todas_las_pruebas():
     """Ejecuta todas las pruebas del sistema"""
     print("🚀 INICIANDO PRUEBAS DEL SISTEMA DE BIBLIOTECA 🚀")
@@ -178,10 +260,13 @@ def ejecutar_todas_las_pruebas():
         test_categoria_libro()
         test_usuario()
         test_libro()
+        test_arbol_avl()
         test_cola_prestamos()
         test_pila_historial()
         test_sistema_completo()
         test_validaciones()
+
+        reporte = analisis_eficiencia()
         
         print("=" * 60)
         print("🎉 ¡TODAS LAS PRUEBAS PASARON EXITOSAMENTE! 🎉")
@@ -190,6 +275,13 @@ def ejecutar_todas_las_pruebas():
         print("✅ Las estructuras de datos funcionan (Cola FIFO y Pila LIFO)")
         print("✅ El flujo completo del sistema es correcto")
         print("✅ Las validaciones están funcionando")
+        print("=" * 60)
+        print("📈 ANÁLISIS DE EFICIENCIA (LISTA vs ÁRBOL AVL)")
+        print(f"Elementos evaluados : {reporte['elementos']}")
+        print(f"Búsquedas realizadas : {reporte['busquedas']}")
+        print(f"Tiempo en lista      : {reporte['tiempo_lista_seg']:.6f} segundos")
+        print(f"Tiempo en AVL        : {reporte['tiempo_arbol_seg']:.6f} segundos")
+        print(f"Factor de mejora     : {reporte['factor_mejora']:.2f}x")
         
     except AssertionError as e:
         print("=" * 60)
